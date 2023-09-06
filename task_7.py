@@ -82,6 +82,20 @@ def execute_order(order_type, price, quantity):
         account_balance += price * quantity
         st.write(f"Updated account balance: {account_balance} USDT")
 
+def fetch_cryptocurrency_data(symbol, interval, limit):
+    base_url = "https://min-api.cryptocompare.com/data/v2/histoday"
+    params = {
+        "fsym": symbol,
+        "tsym": "USD",
+        "limit": limit,
+        "aggregate": 1,  # You can adjust this for different intervals
+        "e": "CCCAGG"  # Use the CryptoCompare aggregation
+    }
+
+    response = requests.get(base_url, params=params)
+    data = response.json()
+    return data["Data"]["Data"]
+
 def predicted_price():
     # Fetch and store data for Bitcoin (BTC)
         btc_data = fetch_cryptocurrency_data("BTC", "1d", 1000)
