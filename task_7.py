@@ -101,11 +101,8 @@ def predicted_price():
         btc_data = fetch_cryptocurrency_data("BTC", "1d", 1000)
         btc_df = pd.DataFrame(btc_data, columns=["timestamp", "open", "high", "low", "close", "volume", "close_time", "quote_asset_volume", "number_of_trades", "taker_buy_base_asset_volume", "taker_buy_quote_asset_volume", "ignore"])
         btc_df = btc_df[["timestamp", "open", "high", "low", "close", "volume"]]  # Select relevant columns
-        btc_df.to_csv("btc_data.csv", index=False)
 
-        # Load the collected data into dataframes
-        btc_data = pd.read_csv('btc_data.csv')
-
+        btc_data = btc_df
         # Feature selection
         features = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
 
