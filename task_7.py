@@ -3,11 +3,9 @@ import pandas as pd
 import numpy as np
 import requests
 import streamlit as st
-from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
-from statsmodels.tsa.arima.model import ARIMA
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error
+from sklearn.impute import SimpleImputer
 
 # CryptoCompare API endpoints
 BASE_URL = "https://min-api.cryptocompare.com/data/"
@@ -102,42 +100,63 @@ def fetch_cryptocurrency_data(symbol, interval, limit):
     
     return data["Data"]["Data"]
 
+
+
 def predicted_price():
     # Fetch and store data for Bitcoin (BTC)
-        btc_data = fetch_cryptocurrency_data("BTC", "1d", 1000)
-        btc_df = pd.DataFrame(btc_data, columns=["timestamp", "open", "high", "low", "close", "volume", "close_time", "quote_asset_volume", "number_of_trades", "taker_buy_base_asset_volume", "taker_buy_quote_asset_volume", "ignore"])
-        btc_df = btc_df[["timestamp", "open", "high", "low", "close", "volume"]]  # Select relevant columns
-        
+    btc_data = fetch_cryptocurrency_data("BTC", "1d", 1000)
+    btc_df = pd.DataFrame(btc_data, columns=["timestamp", "open", "high", "low", "close", "volume", "close_time", "quote_asset_volume", "number_of_trades", "taker_buy_base_asset_volume", "taker_buy_quote_asset_volume", "ignore"])
+    btc_df = btc_df[["timestamp", "open", "high", "low", "close", "volume"]]  # Select relevant columns
+    btc=btc_df
 
-        btc_data = btc_df
-        # Feature selection
-        features = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+    # Feature selection
+    features = ['timestamp', 'open', 'high', 'low', 'volume']  # Removing 'close' as it's the target variable
 
-        # Keep only the selected features
-        btc_data = btc_data[features]
-        btc_data.fillna(method='ffill', inplace=True)
-        # Create input features (X) and target variable (y)
-        coin_data = btc_data
+    # Keep only the selected features
+    btc_df = btc_df[features]
+    
+    # Convert timestamp to datetime and set it as index
+    btc_df['timestamp'] = pd.to_datetime(btc_df['timestamp'], unit='ms')
+    btc_df.set_index('timestamp', inplace=True)
 
-        # Convert timestamp to datetime and set it as index
-        coin_data['timestamp'] = pd.to_datetime(coin_data['timestamp'], unit='ms')
-        coin_data.set_index('timestamp', inplace=True)
+    # Extract the 'close' prices for modeling (target variable)
+    prices = btc['close']
 
-        # Extract the 'close' prices for modeling
-        prices = coin_data['close']
+    # Split data into training and testing sets
+    train_size = int(len(prices) * 0.8)
+    train, test = prices[:train_size], prices[train_size:]
 
-        # Split data into training and testing sets
-        train_size = int(len(prices) * 0.8)
-        train, test = prices[:train_size], prices[train_size:]
+    # Prepare the training data
+    X_train = btc_df.iloc[:train_size][['open', 'high', 'low', 'volume']]
+    y_train = train
 
-        # Build ARMA model
-        order = (2, 0, 0)  # ARMA(p=2, q=0)
-        model = ARIMA(train, order=order)
-        model_fit = model.fit()
+    # Prepare the testing data
+    X_test = btc_df.iloc[train_size:][['open', 'high', 'low', 'volume']]
 
-        # Make predictions
-        predictions = model_fit.predict(start=len(train), end=len(train) + len(test) - 1)
-        st.write(f"Predicted Price as on the basis of data scraped : {predictions}")
+    # Handle missing values by imputing with the mean value
+    imputer = SimpleImputer(strategy='mean')
+    X_train = imputer.fit_transform(X_train)
+    X_test = imputer.transform(X_test)
+
+    # Scale the data using Standardization (z-score scaling)
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+
+    # Round off values to stay within float32 range
+    X_train = X_train.round(6)  # Adjust the number of decimal places as needed
+    X_test = X_test.round(6)    # Adjust the number of decimal places as needed
+
+    # Build and train a Random Forest Regressor model
+    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+
+    # Make predictions
+    predictions = model.predict(X_test)
+
+    # Display the predicted prices
+    st.write(f"Predicted Prices based on Random Forest Regressor: {predictions[0]}")
+
 
 
 def main():
