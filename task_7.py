@@ -1,9 +1,13 @@
 import time
 import pandas as pd
+import numpy as np
 import requests
 import streamlit as st
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from statsmodels.tsa.arima.model import ARIMA
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
 
 # CryptoCompare API endpoints
 BASE_URL = "https://min-api.cryptocompare.com/data/"
@@ -82,6 +86,7 @@ def execute_order(order_type, price, quantity):
         account_balance += price * quantity
         st.write(f"Updated account balance: {account_balance} USDT")
 
+
 def fetch_cryptocurrency_data(symbol, interval, limit):
     base_url = "https://min-api.cryptocompare.com/data/v2/histoday"
     params = {
@@ -94,6 +99,7 @@ def fetch_cryptocurrency_data(symbol, interval, limit):
 
     response = requests.get(base_url, params=params)
     data = response.json()
+    
     return data["Data"]["Data"]
 
 def predicted_price():
@@ -101,6 +107,7 @@ def predicted_price():
         btc_data = fetch_cryptocurrency_data("BTC", "1d", 1000)
         btc_df = pd.DataFrame(btc_data, columns=["timestamp", "open", "high", "low", "close", "volume", "close_time", "quote_asset_volume", "number_of_trades", "taker_buy_base_asset_volume", "taker_buy_quote_asset_volume", "ignore"])
         btc_df = btc_df[["timestamp", "open", "high", "low", "close", "volume"]]  # Select relevant columns
+        
 
         btc_data = btc_df
         # Feature selection
@@ -108,45 +115,30 @@ def predicted_price():
 
         # Keep only the selected features
         btc_data = btc_data[features]
-
-        # Handling missing values with forward fill
         btc_data.fillna(method='ffill', inplace=True)
-
         # Create input features (X) and target variable (y)
-        X = btc_data[['open', 'high', 'low', 'volume']]  # Use relevant features
-        y = btc_data['close']  # Target variable
+        coin_data = btc_data
 
-        # Split the data into training and testing/validation sets
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        # Convert timestamp to datetime and set it as index
+        coin_data['timestamp'] = pd.to_datetime(coin_data['timestamp'], unit='ms')
+        coin_data.set_index('timestamp', inplace=True)
 
-        # Standardize the data (optional but often recommended)
-        scaler = StandardScaler()
-        X_train_scaled = scaler.fit_transform(X_train)
-        X_test_scaled = scaler.transform(X_test)
+        # Extract the 'close' prices for modeling
+        prices = coin_data['close']
 
-        from sklearn.linear_model import LinearRegression
-        from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+        # Split data into training and testing sets
+        train_size = int(len(prices) * 0.8)
+        train, test = prices[:train_size], prices[train_size:]
 
-        # Create a Linear Regression model
-        linear_model = LinearRegression()
+        # Build ARMA model
+        order = (2, 0, 0)  # ARMA(p=2, q=0)
+        model = ARIMA(train, order=order)
+        model_fit = model.fit()
 
-        # Train the model on the training data
-        linear_model.fit(X_train_scaled, y_train)
-        predicted_price = linear_model.predict(X_test_scaled)[0]
-        st.write(f"Predicted Price as on the basis of data scraped : {predicted_price}")
+        # Make predictions
+        predictions = model_fit.predict(start=len(train), end=len(train) + len(test) - 1)
+        st.write(f"Predicted Price as on the basis of data scraped : {predictions}")
 
-# Function to fetch cryptocurrency data from Binance API
-def fetch_cryptocurrency_data(symbol, interval, limit):
-    base_url = "https://api.binance.com/api/v3/klines"
-    params = {
-        "symbol": symbol + "USDT",  # Cryptocurrency symbol with trading pair
-        "interval": interval,       # Desired interval: 1h (hourly), 1d (daily), 1w (weekly)
-        "limit": limit              # Number of data points to retrieve
-    }
-    
-    response = requests.get(base_url, params=params)
-    data = response.json()
-    return data
 
 def main():
     global predicted_price 
@@ -182,5 +174,4 @@ if __name__ == '__main__':
     main()
     if stop_bot:  # Stop the bot when the "Stop Bot" button is pressed
         st.write("Bot stopped.")
-
 
